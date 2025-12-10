@@ -2,65 +2,158 @@ import SwiftUI
 import SwiftData
 
 struct PantryView: View {
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var appState: AppState // Access Navigation State
     @Query(sort: \Bill.date, order: .reverse) var recentBills: [Bill]
     
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $appState.pantryPath) {
             ZStack {
                 Color.pieCream.ignoresSafeArea()
                 
-                if recentBills.isEmpty {
-                    VStack(spacing: 15) {
-                        Image(systemName: "basket")
-                            .font(.system(size: 50))
-                            .foregroundColor(.pieCoffee.opacity(0.3))
-                        Text("The Pantry is Empty")
-                            .pieFont(.title3, weight: .bold)
+                VStack(spacing: 0) {
+                    // Header
+                    HStack {
+                        Text("Pantry")
+                            .pieFont(.largeTitle, weight: .heavy)
                             .foregroundColor(.pieCoffee)
+                        Spacer()
                     }
-                } else {
-                    ScrollView {
+                    .padding(.horizontal)
+                    .padding(.top, 60)
+                    .padding(.bottom, 20)
+                    
+                    if recentBills.isEmpty {
                         VStack(spacing: 15) {
-                            ForEach(recentBills) { bill in
-                                // Navigation Link to see details could go here
-                                HStack {
-                                    // Icon
-                                    Circle()
-                                        .stroke(Color.pieCrust, lineWidth: 3)
-                                        .frame(width: 44, height: 44)
-                                        .overlay(
-                                            Text(bill.title.prefix(1))
-                                                .pieFont(.headline, weight: .bold)
-                                                .foregroundColor(.pieCrust)
-                                        )
-                                    
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(bill.title)
-                                            .pieFont(.headline, weight: .bold)
-                                        Text(bill.date.formatted(date: .abbreviated, time: .shortened))
-                                            .pieFont(.caption)
-                                            .opacity(0.6)
+                            Spacer()
+                            Image(systemName: "basket")
+                                .font(.system(size: 60))
+                                .foregroundColor(.pieCoffee.opacity(0.2))
+                            Text("The Pantry is Empty")
+                                .pieFont(.title3, weight: .bold)
+                                .foregroundColor(.pieCoffee.opacity(0.6))
+                            Text("Your past slices will appear here.")
+                                .pieFont(.caption)
+                                .opacity(0.4)
+                            Spacer()
+                        }
+                    } else {
+                        List {
+                            ForEach(groupedBills.keys.sorted(by: >), id: \.self) { date in
+                                Section(header: dateHeader(for: date)) {
+                                    ForEach(groupedBills[date]!) { bill in
+                                        // Use NavigationLink for standard push navigation
+                                        // This works seamlessly with the programatic navigation from Checkout
+                                        ZStack {
+                                            BillRowCard(bill: bill)
+                                            NavigationLink(value: bill) {
+                                                EmptyView()
+                                            }
+                                            .opacity(0) // Invisible link overlay
+                                        }
+                                        .listRowBackground(Color.clear)
+                                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                            Button(role: .destructive) {
+                                                deleteBill(bill)
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                            .tint(Color.Fruit.cherry)
+                                        }
                                     }
-                                    
-                                    Spacer()
-                                    
-                                    Text(String(format: "$%.2f", bill.totalAmount))
-                                        .pieFont(.headline, weight: .bold)
-                                        .foregroundColor(.pieCoffee)
                                 }
-                                .padding()
-                                .background(Color.white) // Clean White
-                                .cornerRadius(16)
-                                .shadow(color: Color.black.opacity(0.03), radius: 5, y: 2)
-                                .padding(.horizontal)
                             }
                         }
-                        .padding(.top)
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal)
+                        .padding(.bottom, 120) // Clear Tab Bar
                     }
                 }
             }
-            .navigationTitle("Pantry")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: Bill.self) { bill in
+                BillDetailView(bill: bill)
+            }
         }
+    }
+    
+    // Helpers
+    var groupedBills: [Date: [Bill]] {
+        Dictionary(grouping: recentBills) { bill in
+            Calendar.current.startOfDay(for: bill.date)
+        }
+    }
+    
+    func dateHeader(for date: Date) -> some View {
+        let title: String
+        if Calendar.current.isDateInToday(date) { title = "Today" }
+        else if Calendar.current.isDateInYesterday(date) { title = "Yesterday" }
+        else { title = date.formatted(date: .abbreviated, time: .omitted) }
+        
+        return Text(title)
+            .pieFont(.caption, weight: .bold)
+            .foregroundColor(.pieCoffee.opacity(0.5))
+            .textCase(.uppercase)
+            .padding(.vertical, 8)
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            .background(Color.pieCream)
+    }
+    
+    func deleteBill(_ bill: Bill) {
+        withAnimation {
+            modelContext.delete(bill)
+        }
+    }
+}
+
+// Subview
+struct BillRowCard: View {
+    let bill: Bill
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(bill.title)
+                    .pieFont(.body, weight: .bold)
+                    .foregroundColor(.pieCoffee)
+                    .lineLimit(1)
+                
+                Text(bill.date.formatted(date: .omitted, time: .shortened))
+                    .pieFont(.caption)
+                    .foregroundColor(.pieCoffee.opacity(0.5))
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(String(format: "$%.2f", bill.totalAmount))
+                    .pieFont(.headline, weight: .heavy)
+                    .foregroundColor(.pieCrust)
+                
+                if !bill.diners.isEmpty {
+                    HStack(spacing: -8) {
+                        ForEach(bill.diners.prefix(4)) { diner in
+                            Circle()
+                                .fill(Color(hex: diner.hexColor))
+                                .frame(width: 20, height: 20)
+                                .overlay(Circle().stroke(Color.pieCream, lineWidth: 1.5))
+                        }
+                        if bill.diners.count > 4 {
+                            Circle()
+                                .fill(Color.pieCoffee.opacity(0.1))
+                                .frame(width: 20, height: 20)
+                                .overlay(Text("+\(bill.diners.count - 4)").font(.system(size: 8, weight: .bold)).foregroundColor(.pieCoffee))
+                                .overlay(Circle().stroke(Color.pieCream, lineWidth: 1.5))
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.5))
+        .cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.pieCoffee.opacity(0.08), lineWidth: 1))
+        .shadow(color: Color.pieCoffee.opacity(0.02), radius: 5, y: 2)
     }
 }

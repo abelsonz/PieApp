@@ -1,32 +1,23 @@
-//
-//  PieApp.swift
-//  Pie
-//
-//  Created by Zach on 12/9/25.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
 struct PieApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
-
+    // Check if user has seen onboarding
+    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
+    
+    // Create the central Navigation State
+    @StateObject private var appState = AppState()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if hasCompletedOnboarding {
+                MainTabView()
+                    .environmentObject(appState) // Inject here
+            } else {
+                OnboardingView()
+            }
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(for: Bill.self)
     }
 }
