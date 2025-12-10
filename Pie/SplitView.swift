@@ -7,8 +7,8 @@ struct SplitView: View {
     @State private var isProcessing = false
     @State private var navigateToSlicing = false
     @State private var showError = false
+    @State private var showTutorial = false // NEW STATE
     
-    // The parser handles the AI scanning
     @StateObject private var parser = ReceiptParser()
     
     var body: some View {
@@ -26,20 +26,22 @@ struct SplitView: View {
                             .foregroundColor(.pieCoffee)
                     }
                 } else {
-                    VStack {
-                        // 1. Header
+                    VStack(spacing: 0) {
+                        // MARK: - 1. Unified Header
                         HStack {
                             Text("Split")
                                 .pieFont(.largeTitle, weight: .heavy)
+                                .foregroundColor(.pieCoffee)
                             Spacer()
                         }
                         .padding(.horizontal)
-                        .padding(.top, 20)
+                        .padding(.top, 60)
+                        .padding(.bottom, 20)
                         
                         Spacer()
                         
-                        // 2. Main Content Group
-                        VStack(spacing: 50) { // Adjusted spacing for balance
+                        // MARK: - 2. Main Content
+                        VStack(spacing: 40) {
                             
                             // Illustration & Text
                             VStack(spacing: 20) {
@@ -54,33 +56,33 @@ struct SplitView: View {
                                     
                                     Text("Snap a photo or upload a receipt.")
                                         .pieFont(.body)
+                                        .foregroundColor(.pieCoffee)
                                         .opacity(0.6)
                                 }
                             }
                             
                             // Buttons Row
-                            HStack(spacing: 15) {
-                                // Camera Button
-                                Button(action: { showCamera = true }) {
-                                    HStack {
-                                        Image(systemName: "camera.fill")
-                                        Text("Camera")
-                                            .pieFont(.headline, weight: .bold)
+                            VStack(spacing: 20) { // Wrapped in VStack to add Tutorial button below
+                                HStack(spacing: 15) {
+                                    Button(action: { showCamera = true }) {
+                                        HStack {
+                                            Image(systemName: "camera.fill")
+                                            Text("Camera")
+                                                .pieFont(.headline, weight: .bold)
+                                        }
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 20)
+                                        .background(Color.pieCrust)
+                                        .clipShape(Capsule())
+                                        .shadow(color: Color.pieCrust.opacity(0.4), radius: 10, y: 6)
                                     }
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 20)
-                                    .background(Color.pieCrust)
-                                    .clipShape(Capsule())
-                                    .shadow(color: Color.pieCrust.opacity(0.4), radius: 10, y: 6)
-                                }
-                                
-                                // Upload Button
-                                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                                    HStack {
-                                        Image(systemName: "photo.on.rectangle")
-                                        Text("Upload")
-                                            .pieFont(.headline, weight: .bold)
+                                    
+                                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                                        HStack {
+                                            Image(systemName: "photo.on.rectangle")
+                                            Text("Upload")
+                                                .pieFont(.headline, weight: .bold)
                                     }
                                     .foregroundColor(.pieCoffee)
                                     .frame(maxWidth: .infinity)
@@ -88,42 +90,51 @@ struct SplitView: View {
                                     .background(Color.white)
                                     .clipShape(Capsule())
                                     .shadow(color: Color.black.opacity(0.05), radius: 10, y: 5)
+                                    }
+                                    .onChange(of: selectedPhotoItem) { oldValue, newItem in
+                                        processPhoto(newItem)
+                                    }
                                 }
-                                .onChange(of: selectedPhotoItem) { oldValue, newItem in
-                                    processPhoto(newItem)
+                                
+                                // NEW: Tutorial Button
+                                Button(action: { showTutorial = true }) {
+                                    Text("How it Works")
+                                        .pieFont(.subheadline, weight: .semibold)
+                                        .foregroundColor(.pieCoffee.opacity(0.5))
+                                        .underline()
                                 }
                             }
                             .padding(.horizontal, 20)
                         }
                         
-                        // 3. Bottom Spacers
                         Spacer()
                         Spacer()
                     }
                     .padding(.bottom, 130)
                 }
             }
-            // Logic: Handle Camera Sheet
             .fullScreenCover(isPresented: $showCamera) {
                 ImagePicker(sourceType: .camera) { image in
                     processUIImage(image)
                 }
                 .ignoresSafeArea()
             }
-            // Logic: Navigate to Slicing View when ready
             .fullScreenCover(isPresented: $navigateToSlicing) {
                 SlicingView(initialItems: parser.parsedItems, initialTax: parser.detectedTax)
             }
-            // Logic: Error Handling
-            .alert("Scan Failed", isPresented: $showError) {
+            .alert("Whoops!", isPresented: $showError) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text(parser.errorMessage ?? "Unknown error occurred.")
+                Text(parser.errorMessage ?? "Something went wrong.")
+            }
+            // NEW: Tutorial Sheet
+            .sheet(isPresented: $showTutorial) {
+                OnboardingView()
             }
         }
     }
     
-    // MARK: - Logic
+    // Logic
     func processPhoto(_ item: PhotosPickerItem?) {
         guard let item = item else { return }
         isProcessing = true
@@ -131,10 +142,9 @@ struct SplitView: View {
         Task {
             if let data = try? await item.loadTransferable(type: Data.self),
                let uiImage = UIImage(data: data) {
-                
                 DispatchQueue.main.async {
                     processUIImage(uiImage)
-                    selectedPhotoItem = nil // Reset selection
+                    selectedPhotoItem = nil
                 }
             } else {
                 DispatchQueue.main.async {
@@ -148,8 +158,6 @@ struct SplitView: View {
     func processUIImage(_ image: UIImage) {
         isProcessing = true
         parser.scanImage(image)
-        
-        // Poll the parser to see when it finishes
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
             if !parser.isParsing {
                 timer.invalidate()
@@ -164,35 +172,24 @@ struct SplitView: View {
     }
 }
 
-// MARK: - Helper: ImagePicker
 struct ImagePicker: UIViewControllerRepresentable {
     var sourceType: UIImagePickerController.SourceType
     var onImagePicked: (UIImage) -> Void
-    
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = sourceType
         picker.delegate = context.coordinator
         return picker
     }
-    
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-    
     func makeCoordinator() -> Coordinator { Coordinator(self) }
-    
     class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
         let parent: ImagePicker
         init(_ parent: ImagePicker) { self.parent = parent }
-        
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.onImagePicked(image)
-            }
+            if let image = info[.originalImage] as? UIImage { parent.onImagePicked(image) }
             picker.dismiss(animated: true)
         }
-        
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
-        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { picker.dismiss(animated: true) }
     }
 }

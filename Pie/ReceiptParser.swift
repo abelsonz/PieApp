@@ -3,8 +3,15 @@ import UIKit
 import Combine
 
 class ReceiptParser: ObservableObject {
-    // ⚠️ PASTE YOUR GEMINI API KEY HERE ⚠️
-    private let apiKey = "AIzaSyDgMIs9XejLGh0PO-kdkUbb7j68cUujYE0"
+    
+    // MARK: - Secure API Key Access
+    // This reads the key from the Info.plist, which gets it from Secrets.xcconfig
+    private var apiKey: String {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "GeminiAPIKey") as? String else {
+            return ""
+        }
+        return key
+    }
     
     @Published var isParsing = false
     @Published var parsedItems: [BillItem] = []
@@ -13,17 +20,17 @@ class ReceiptParser: ObservableObject {
     
     func scanImage(_ image: UIImage) {
         // 1. Validation
-        if apiKey.contains("PASTE_YOUR") || apiKey.isEmpty {
+        if apiKey.isEmpty || apiKey.contains("AIza") == false { // Simple check for likely invalid key
             DispatchQueue.main.async {
-                self.errorMessage = "Missing API Key in ReceiptParser.swift"
+                self.errorMessage = "The scanner isn't configured correctly. Please check your API Key setup."
                 self.isParsing = false
             }
             return
         }
         
-        // 2. Prepare Image (Base64)
+        // 2. Prepare Image
         guard let imageData = image.jpegData(compressionQuality: 0.7) else {
-            DispatchQueue.main.async { self.errorMessage = "Could not process image data." }
+            DispatchQueue.main.async { self.errorMessage = "We couldn't process that image. Please try again." }
             return
         }
         let base64Image = imageData.base64EncodedString()
@@ -34,8 +41,7 @@ class ReceiptParser: ObservableObject {
             self.parsedItems = []
         }
         
-        // 3. The URL (UPDATED MODEL)
-        // Switched to 'gemini-robotics-er-1.5-preview' per your request
+        // 3. The URL
         let modelName = "gemini-robotics-er-1.5-preview"
         let urlString = "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent?key=\(apiKey)"
         
@@ -45,9 +51,12 @@ class ReceiptParser: ObservableObject {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // 4. The Prompt
+        // 4. The Prompt (Updated for User Friendliness)
+        // We now ask it to explicitly flag non-receipts using "isReceipt": false
         let promptText = """
-        Analyze receipt. Return JSON: { "items": [{"name": "Item", "price": 0.00}], "tax": 0.00 }
+        Analyze this image.
+        If it IS a receipt, return JSON: { "items": [{"name": "Item Name", "price": 0.00}], "tax": 0.00 }.
+        If it is NOT a receipt (e.g. a selfie, a cat, a landscape), return JSON: { "isReceipt": false }.
         """
         
         let body: [String: Any] = [
@@ -71,13 +80,13 @@ class ReceiptParser: ObservableObject {
             DispatchQueue.main.async {
                 self.isParsing = false
                 
-                if let error = error {
-                    self.errorMessage = "Network Error: \(error.localizedDescription)"
+                if let _ = error {
+                    self.errorMessage = "We're having trouble connecting. Please check your internet."
                     return
                 }
                 
                 guard let data = data else {
-                    self.errorMessage = "No data received."
+                    self.errorMessage = "The scanner didn't respond. Please try again."
                     return
                 }
                 
@@ -90,10 +99,10 @@ class ReceiptParser: ObservableObject {
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 
-                // Check for API Errors
+                // Check for API Errors (e.g. Quota limits)
                 if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
-                    self.errorMessage = "Gemini Error: \(message)"
                     print("❌ Gemini Error: \(message)")
+                    self.errorMessage = "The scanner is temporarily unavailable. Please try again in a moment."
                     return
                 }
                 
@@ -103,26 +112,43 @@ class ReceiptParser: ObservableObject {
                    let parts = content["parts"] as? [[String: Any]],
                    let text = parts.first?["text"] as? String {
                     
-                    // Clean Markdown
+                    // Clean Markdown if present
                     let cleanJson = text.replacingOccurrences(of: "```json", with: "")
                                         .replacingOccurrences(of: "```", with: "")
                                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     
-                    if let jsonData = cleanJson.data(using: .utf8) {
-                        let result = try JSONDecoder().decode(GeminiResponse.self, from: jsonData)
+                    guard let jsonData = cleanJson.data(using: .utf8) else {
+                        self.errorMessage = "We couldn't read the data from this receipt. Please retake the photo."
+                        return
+                    }
+                    
+                    // 1. Check if it's a valid receipt
+                    if let result = try? JSONDecoder().decode(GeminiResponse.self, from: jsonData) {
                         self.parsedItems = result.items.map { BillItem(name: $0.name, price: $0.price) }
                         self.detectedTax = result.tax
-                        print("✅ Success: Found \(self.parsedItems.count) items using model: gemini-robotics-er-1.5-preview")
-                    } else {
-                        self.errorMessage = "Could not parse response text."
+                        
+                        if self.parsedItems.isEmpty {
+                            self.errorMessage = "We couldn't find any items on this receipt. Try moving closer."
+                        }
+                        return
                     }
+                    
+                    // 2. Check if AI explicitly rejected it
+                    if let rejection = try? JSONDecoder().decode(GeminiRejection.self, from: jsonData), rejection.isReceipt == false {
+                        self.errorMessage = "That doesn't look like a receipt. Please ensure the receipt is clearly visible."
+                        return
+                    }
+                    
+                    // 3. Fallback
+                    self.errorMessage = "We couldn't understand this image. Please make sure the receipt is flat and well-lit."
+                    
                 } else {
-                    self.errorMessage = "Receipt not recognized."
+                    self.errorMessage = "We couldn't find a receipt in this image. Please try again."
                 }
             }
         } catch {
-            self.errorMessage = "Parsing Error: \(error.localizedDescription)"
             print("❌ Parsing Error: \(error)")
+            self.errorMessage = "Something went wrong reading the receipt. Please try again."
         }
     }
 }
@@ -132,7 +158,13 @@ struct GeminiResponse: Codable {
     let items: [GeminiItem]
     let tax: Double
 }
+
 struct GeminiItem: Codable {
     let name: String
     let price: Double
+}
+
+// New helper for explicit rejections
+struct GeminiRejection: Codable {
+    let isReceipt: Bool
 }

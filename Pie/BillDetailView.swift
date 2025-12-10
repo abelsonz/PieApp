@@ -32,7 +32,7 @@ struct BillDetailView: View {
                         .foregroundColor(.pieCoffee.opacity(0.7))
                     Spacer()
                     
-                    // SHARE BUTTON IMPLEMENTATION
+                    // Share Button
                     if let renderedImage = renderedImage {
                         ShareLink(item: renderedImage, preview: SharePreview("Receipt for \(bill.title)", image: renderedImage)) {
                             Image(systemName: "square.and.arrow.up")
@@ -43,7 +43,7 @@ struct BillDetailView: View {
                                 .clipShape(Circle())
                         }
                     } else {
-                        // Placeholder while loading
+                        // Placeholder
                         Image(systemName: "square.and.arrow.up")
                             .font(.body)
                             .foregroundColor(.pieCoffee.opacity(0.3))
@@ -64,11 +64,14 @@ struct BillDetailView: View {
             }
         }
         .navigationBarHidden(true)
+        .toolbar(.hidden, for: .tabBar) // <--- HIDES THE TAB BAR
         .gesture(DragGesture().onEnded { value in
             if value.translation.width > 60 { dismiss() }
         })
         .onAppear {
-            renderImage()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                renderImage()
+            }
         }
     }
     
@@ -117,21 +120,20 @@ struct BillDetailView: View {
                 }
             }
             
-            // Add branding for shared image
+            // Branding Footer
             Text("Split with Pie")
                 .pieFont(.caption, weight: .bold)
                 .foregroundColor(.pieCrust)
                 .padding(.top, 20)
         }
         .padding(20)
-        .background(Color.pieCream) // Ensure background for screenshot
+        .background(Color.pieCream)
     }
     
     @MainActor
     func renderImage() {
-        // Create a dedicated renderer for the content
-        let renderer = ImageRenderer(content: contentToShare.frame(width: 375)) // Fixed width for consistent image
-        renderer.scale = 3.0 // High resolution
+        let renderer = ImageRenderer(content: contentToShare.frame(width: 375))
+        renderer.scale = 3.0
         
         if let uiImage = renderer.uiImage {
             renderedImage = Image(uiImage: uiImage)
@@ -139,10 +141,11 @@ struct BillDetailView: View {
     }
 }
 
-// Ensure DinerSummaryCard is included
 struct DinerSummaryCard: View {
     let diner: Diner; let bill: Bill; let billSubtotal: Double
+    
     var dinerItems: [BillItem] { bill.items.filter { $0.assignedDinerIds.contains(diner.id) } }
+    
     var dinerSubtotal: Double { dinerItems.reduce(0) { total, item in total + (item.price / Double(item.assignedDinerIds.count)) } }
     var dinerTax: Double { billSubtotal == 0 ? 0 : bill.taxAmount * (dinerSubtotal / billSubtotal) }
     var dinerTip: Double { billSubtotal == 0 ? 0 : bill.tipAmount * (dinerSubtotal / billSubtotal) }
@@ -151,20 +154,62 @@ struct DinerSummaryCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Circle().fill(Color(hex: diner.hexColor).opacity(0.15)).frame(width: 40, height: 40).overlay(Text(diner.initials).pieFont(.caption, weight: .bold).foregroundColor(Color(hex: diner.hexColor)))
-                Text(diner.name).pieFont(.headline, weight: .bold).foregroundColor(.pieCoffee)
+                Circle().fill(Color(hex: diner.hexColor).opacity(0.15))
+                    .frame(width: 40, height: 40)
+                    .overlay(Text(diner.initials).pieFont(.caption, weight: .bold).foregroundColor(Color(hex: diner.hexColor)))
+                
+                Text(diner.name)
+                    .pieFont(.headline, weight: .bold)
+                    .foregroundColor(.pieCoffee)
+                
                 Spacer()
-                Text(String(format: "$%.2f", dinerTotal)).pieFont(.title3, weight: .heavy).foregroundColor(Color(hex: diner.hexColor))
+                
+                Text(String(format: "$%.2f", dinerTotal))
+                    .pieFont(.title3, weight: .heavy)
+                    .foregroundColor(Color(hex: diner.hexColor))
             }
             .padding(16)
+            
             if !dinerItems.isEmpty {
                 Divider().opacity(0.5)
+                
                 VStack(spacing: 12) {
                     ForEach(dinerItems) { item in
                         HStack(alignment: .top) {
-                            Text(item.name).pieFont(.caption, weight: .medium).foregroundColor(.pieCoffee.opacity(0.8)).fixedSize(horizontal: false, vertical: true)
+                            Text(item.name)
+                                .pieFont(.caption, weight: .medium)
+                                .foregroundColor(.pieCoffee.opacity(0.8))
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer()
-                            Text(String(format: "$%.2f", item.price / Double(item.assignedDinerIds.count))).pieFont(.caption, weight: .bold).foregroundColor(.pieCoffee)
+                            Text(String(format: "$%.2f", item.price / Double(item.assignedDinerIds.count)))
+                                .pieFont(.caption, weight: .bold)
+                                .foregroundColor(.pieCoffee)
+                        }
+                    }
+                    
+                    if dinerTax > 0 || dinerTip > 0 {
+                        Divider().padding(.vertical, 4)
+                        if dinerTax > 0 {
+                            HStack {
+                                Text("Tax")
+                                    .pieFont(.caption, weight: .medium)
+                                    .foregroundColor(.pieCoffee.opacity(0.6))
+                                Spacer()
+                                Text(String(format: "$%.2f", dinerTax))
+                                    .pieFont(.caption, weight: .medium)
+                                    .foregroundColor(.pieCoffee.opacity(0.6))
+                            }
+                        }
+                        if dinerTip > 0 {
+                            HStack {
+                                Text("Tip")
+                                    .pieFont(.caption, weight: .medium)
+                                    .foregroundColor(.pieCoffee.opacity(0.6))
+                                Spacer()
+                                Text(String(format: "$%.2f", dinerTip))
+                                    .pieFont(.caption, weight: .medium)
+                                    .foregroundColor(.pieCoffee.opacity(0.6))
+                            }
                         }
                     }
                 }
@@ -172,6 +217,8 @@ struct DinerSummaryCard: View {
                 .background(Color.white.opacity(0.3))
             }
         }
-        .background(Color.pieCream).cornerRadius(20).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.pieCoffee.opacity(0.1), lineWidth: 1))
+        .background(Color.pieCream)
+        .cornerRadius(20)
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.pieCoffee.opacity(0.1), lineWidth: 1))
     }
 }

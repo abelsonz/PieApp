@@ -3,7 +3,7 @@ import SwiftData
 
 struct PantryView: View {
     @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject var appState: AppState // Access Navigation State
+    @EnvironmentObject var appState: AppState
     @Query(sort: \Bill.date, order: .reverse) var recentBills: [Bill]
     
     var body: some View {
@@ -12,7 +12,7 @@ struct PantryView: View {
                 Color.pieCream.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Header
+                    // MARK: - 1. Unified Header
                     HStack {
                         Text("Pantry")
                             .pieFont(.largeTitle, weight: .heavy)
@@ -20,36 +20,43 @@ struct PantryView: View {
                         Spacer()
                     }
                     .padding(.horizontal)
-                    .padding(.top, 60)
-                    .padding(.bottom, 20)
+                    .padding(.top, 60)   // Already matched
+                    .padding(.bottom, 20) // Already matched
                     
                     if recentBills.isEmpty {
-                        VStack(spacing: 15) {
+                        // MARK: - 2. Empty State (Updated to match SplitView)
+                        VStack(spacing: 20) { // Increased spacing to 20 to match SplitView
                             Spacer()
+                            
                             Image(systemName: "basket")
-                                .font(.system(size: 60))
+                                .font(.system(size: 90)) // Increased from 60 to 90
                                 .foregroundColor(.pieCoffee.opacity(0.2))
-                            Text("The Pantry is Empty")
-                                .pieFont(.title3, weight: .bold)
-                                .foregroundColor(.pieCoffee.opacity(0.6))
-                            Text("Your past slices will appear here.")
-                                .pieFont(.caption)
-                                .opacity(0.4)
+                            
+                            VStack(spacing: 8) {
+                                Text("The Pantry is Empty")
+                                    .pieFont(.title2, weight: .bold) // Upgraded to match SplitView
+                                    .foregroundColor(.pieCoffee.opacity(0.6))
+                                
+                                Text("Your past slices will appear here.")
+                                    .pieFont(.body) // Upgraded from caption to match SplitView
+                                    .foregroundColor(.pieCoffee)
+                                    .opacity(0.6)
+                            }
+                            
                             Spacer()
                         }
+                        .padding(.bottom, 100) // Visual balance
                     } else {
                         List {
                             ForEach(groupedBills.keys.sorted(by: >), id: \.self) { date in
                                 Section(header: dateHeader(for: date)) {
                                     ForEach(groupedBills[date]!) { bill in
-                                        // Use NavigationLink for standard push navigation
-                                        // This works seamlessly with the programatic navigation from Checkout
                                         ZStack {
                                             BillRowCard(bill: bill)
                                             NavigationLink(value: bill) {
                                                 EmptyView()
                                             }
-                                            .opacity(0) // Invisible link overlay
+                                            .opacity(0)
                                         }
                                         .listRowBackground(Color.clear)
                                         .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
@@ -68,7 +75,7 @@ struct PantryView: View {
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
                         .padding(.horizontal)
-                        .padding(.bottom, 120) // Clear Tab Bar
+                        .padding(.bottom, 120)
                     }
                 }
             }
@@ -107,7 +114,6 @@ struct PantryView: View {
     }
 }
 
-// Subview
 struct BillRowCard: View {
     let bill: Bill
     
@@ -123,9 +129,7 @@ struct BillRowCard: View {
                     .pieFont(.caption)
                     .foregroundColor(.pieCoffee.opacity(0.5))
             }
-            
             Spacer()
-            
             VStack(alignment: .trailing, spacing: 6) {
                 Text(String(format: "$%.2f", bill.totalAmount))
                     .pieFont(.headline, weight: .heavy)
