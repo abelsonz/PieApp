@@ -223,32 +223,51 @@ struct DinerAvatar: View {
     var body: some View {
         VStack(spacing: 4) {
             ZStack(alignment: .topTrailing) {
+                // 1. The Avatar (The "Safe" Tap Zone)
                 ZStack {
                     if isSelected {
-                        Circle().stroke(diner.color, lineWidth: 3).frame(width: 58, height: 58)
+                        Circle()
+                            .stroke(diner.color, lineWidth: 3)
+                            .frame(width: 58, height: 58)
                     }
-                    Circle().fill(diner.color.opacity(isSelected ? 1.0 : 0.3)).frame(width: 50, height: 50)
-                    Text(diner.initials).pieFont(.headline, weight: .bold).foregroundColor(isSelected ? .white : .pieCoffee)
+                    Circle()
+                        .fill(diner.color.opacity(isSelected ? 1.0 : 0.3))
+                        .frame(width: 50, height: 50)
+                    
+                    Text(diner.initials)
+                        .pieFont(.headline, weight: .bold)
+                        .foregroundColor(isSelected ? .white : .pieCoffee)
                 }
+                // IMPORTANT: We explicitly define the content shape to be a circle
+                // This ensures tapping the corners doesn't trigger the avatar selection
+                .contentShape(Circle())
                 
+                // 2. The Delete Button (Moved further out)
                 if let onDelete = onDelete {
                     Button(action: onDelete) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
+                            .font(.system(size: 22)) // Slightly larger for visibility
                             .foregroundColor(Color.Fruit.cherry)
-                            .background(Circle().fill(Color.white).padding(2))
+                            .background(Circle().fill(Color.white).padding(2)) // White backing makes it pop
+                            .shadow(radius: 2) // Slight shadow to separate from avatar
                     }
-                    .offset(x: 5, y: -5)
+                    // Move it further away from the center tap zone
+                    .offset(x: 8, y: -8)
+                    // Ensure the button has its own large hit target
+                    .frame(width: 44, height: 44, alignment: .topTrailing)
                 }
             }
             .scaleEffect(isSelected ? 1.1 : 1.0)
             .animation(.spring(), value: isSelected)
             
-            Text(diner.name).pieFont(.caption2, weight: .semibold).opacity(isSelected ? 1.0 : 0.5)
+            Text(diner.name)
+                .pieFont(.caption2, weight: .semibold)
+                .opacity(isSelected ? 1.0 : 0.5)
         }
+        // Increase spacing between avatars so the X doesn't overlap the neighbor
+        .padding(.horizontal, 4)
     }
 }
-
 struct MultiDinerItemRow: View {
     @Binding var item: BillItem
     var activeDinerId: UUID?
