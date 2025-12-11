@@ -122,7 +122,7 @@ struct SplitView: View {
             .fullScreenCover(isPresented: $navigateToSlicing) {
                 SlicingView(initialItems: parser.parsedItems, initialTax: parser.detectedTax)
             }
-            .alert("Whoops!", isPresented: $showError) {
+            .alert("Oops!", isPresented: $showError) {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(parser.errorMessage ?? "Something went wrong.")

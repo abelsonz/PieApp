@@ -24,44 +24,51 @@ struct MainTabView: View {
             }
             
             // Custom Floating Tab Bar
-            HStack {
-                // Tab 1: Pantry
-                Button(action: { appState.selectedTab = 0 }) {
-                    VStack(spacing: 6) {
-                        Image(systemName: "clock.fill")
-                            .font(.system(size: 26))
-                        Text("Pantry")
-                            .pieFont(.subheadline, weight: .bold)
+            // LOGIC FIX: Only show if we are on Split Tab (1) OR if Pantry Path is empty (Root)
+            if appState.selectedTab == 1 || appState.pantryPath.isEmpty {
+                HStack {
+                    // Tab 1: Pantry
+                    Button(action: { appState.selectedTab = 0 }) {
+                        VStack(spacing: 6) {
+                            Image(systemName: "clock.fill")
+                                .font(.system(size: 26))
+                            Text("Pantry")
+                                .pieFont(.subheadline, weight: .bold)
+                        }
+                        .foregroundColor(appState.selectedTab == 0 ? .pieCrust : .pieCoffee.opacity(0.4))
+                        .frame(maxWidth: .infinity)
                     }
-                    .foregroundColor(appState.selectedTab == 0 ? .pieCrust : .pieCoffee.opacity(0.4))
-                    .frame(maxWidth: .infinity)
-                }
-                
-                // Divider
-                Rectangle()
-                    .fill(Color.pieCoffee.opacity(0.1))
-                    .frame(width: 1, height: 35)
-                
-                // Tab 2: Split
-                Button(action: { appState.selectedTab = 1 }) {
-                    VStack(spacing: 6) {
-                        Image(systemName: "fork.knife")
-                            .font(.system(size: 26))
-                        Text("Split")
-                            .pieFont(.subheadline, weight: .bold)
+                    
+                    // Divider
+                    Rectangle()
+                        .fill(Color.pieCoffee.opacity(0.1))
+                        .frame(width: 1, height: 35)
+                    
+                    // Tab 2: Split
+                    Button(action: { appState.selectedTab = 1 }) {
+                        VStack(spacing: 6) {
+                            Image(systemName: "fork.knife")
+                                .font(.system(size: 26))
+                            Text("Split")
+                                .pieFont(.subheadline, weight: .bold)
+                        }
+                        .foregroundColor(appState.selectedTab == 1 ? .pieCrust : .pieCoffee.opacity(0.4))
+                        .frame(maxWidth: .infinity)
                     }
-                    .foregroundColor(appState.selectedTab == 1 ? .pieCrust : .pieCoffee.opacity(0.4))
-                    .frame(maxWidth: .infinity)
                 }
+                .padding(.vertical, 18)
+                .padding(.horizontal, 20)
+                .background(Color.pieCream)
+                .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(0.1), radius: 10, y: 5)
+                .padding(.horizontal, 30)
+                .padding(.bottom, 20)
+                .transition(.move(edge: .bottom)) // Smooth slide animation
             }
-            .padding(.vertical, 18)
-            .padding(.horizontal, 20)
-            .background(Color.pieCream)
-            .clipShape(Capsule())
-            .shadow(color: Color.black.opacity(0.1), radius: 10, y: 5)
-            .padding(.horizontal, 30)
-            .padding(.bottom, 20)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        // Animate the appearance/disappearance of the tab bar
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: appState.pantryPath.isEmpty)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: appState.selectedTab)
     }
 }

@@ -1,8 +1,11 @@
 import SwiftUI
+import SwiftData // 1. Added import
 
 struct BillDetailView: View {
     @Environment(\.dismiss) var dismiss
-    let bill: Bill
+    
+    // 2. Changed from 'let' to '@Bindable var' to allow editing
+    @Bindable var bill: Bill
     
     // For Screenshot
     @State private var renderedImage: Image?
@@ -64,7 +67,7 @@ struct BillDetailView: View {
             }
         }
         .navigationBarHidden(true)
-        .toolbar(.hidden, for: .tabBar) // <--- HIDES THE TAB BAR
+        .toolbar(.hidden, for: .tabBar)
         .gesture(DragGesture().onEnded { value in
             if value.translation.width > 60 { dismiss() }
         })
@@ -73,6 +76,10 @@ struct BillDetailView: View {
                 renderImage()
             }
         }
+        // 4. Update the shareable screenshot immediately when you type a new name
+        .onChange(of: bill.title) { _, _ in
+            renderImage()
+        }
     }
     
     // Extracted view for both display and screenshot
@@ -80,9 +87,13 @@ struct BillDetailView: View {
         VStack(spacing: 25) {
             // 1. The "Ticket" (Grand Total)
             VStack(spacing: 5) {
-                Text(bill.title)
+                
+                // 3. EDITABLE TITLE FIELD
+                TextField("Receipt Name", text: $bill.title)
                     .pieFont(.body, weight: .semibold)
+                    .multilineTextAlignment(.center) // Centers the text
                     .opacity(0.6)
+                    .submitLabel(.done) // Shows "Done" on keyboard
                 
                 Text(String(format: "$%.2f", bill.totalAmount))
                     .font(.system(size: 48, weight: .heavy))

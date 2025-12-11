@@ -50,7 +50,7 @@ class ReceiptParser: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
+        request.addValue(Bundle.main.bundleIdentifier ?? "", forHTTPHeaderField: "X-Ios-Bundle-Identifier")
         // 4. The Prompt (Updated for User Friendliness)
         // We now ask it to explicitly flag non-receipts using "isReceipt": false
         let promptText = """
@@ -102,7 +102,7 @@ class ReceiptParser: ObservableObject {
                 // Check for API Errors (e.g. Quota limits)
                 if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
                     print("❌ Gemini Error: \(message)")
-                    self.errorMessage = "The scanner is temporarily unavailable. Please try again in a moment."
+                    self.errorMessage = "Debug Error: \(message)"
                     return
                 }
                 
