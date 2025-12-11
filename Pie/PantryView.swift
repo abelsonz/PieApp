@@ -6,13 +6,18 @@ struct PantryView: View {
     @EnvironmentObject var appState: AppState
     @Query(sort: \Bill.date, order: .reverse) var recentBills: [Bill]
     
+    // Rename Logic
+    @State private var billToRename: Bill?
+    @State private var renameText: String = ""
+    @State private var showRenameAlert = false
+    
     var body: some View {
         NavigationStack(path: $appState.pantryPath) {
             ZStack {
                 Color.pieCream.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // MARK: - 1. Unified Header
+                    // Header
                     HStack {
                         Text("Pantry")
                             .pieFont(.largeTitle, weight: .heavy)
@@ -20,32 +25,30 @@ struct PantryView: View {
                         Spacer()
                     }
                     .padding(.horizontal)
-                    .padding(.top, 60)   // Already matched
-                    .padding(.bottom, 20) // Already matched
+                    .padding(.top, 60)
+                    .padding(.bottom, 20)
                     
                     if recentBills.isEmpty {
-                        // MARK: - 2. Empty State (Updated to match SplitView)
-                        VStack(spacing: 20) { // Increased spacing to 20 to match SplitView
+                        // Empty State
+                        VStack(spacing: 20) {
                             Spacer()
-                            
                             Image(systemName: "basket")
-                                .font(.system(size: 90)) // Increased from 60 to 90
+                                .font(.system(size: 90))
                                 .foregroundColor(.pieCoffee.opacity(0.2))
                             
                             VStack(spacing: 8) {
                                 Text("The Pantry is Empty")
-                                    .pieFont(.title2, weight: .bold) // Upgraded to match SplitView
+                                    .pieFont(.title2, weight: .bold)
                                     .foregroundColor(.pieCoffee.opacity(0.6))
                                 
                                 Text("Your past slices will appear here.")
-                                    .pieFont(.body) // Upgraded from caption to match SplitView
+                                    .pieFont(.body)
                                     .foregroundColor(.pieCoffee)
                                     .opacity(0.6)
                             }
-                            
                             Spacer()
                         }
-                        .padding(.bottom, 100) // Visual balance
+                        .padding(.bottom, 100)
                     } else {
                         List {
                             ForEach(groupedBills.keys.sorted(by: >), id: \.self) { date in
@@ -60,6 +63,7 @@ struct PantryView: View {
                                         }
                                         .listRowBackground(Color.clear)
                                         .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                                        // SWIPE ACTIONS
                                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                             Button(role: .destructive) {
                                                 deleteBill(bill)
@@ -67,6 +71,22 @@ struct PantryView: View {
                                                 Label("Delete", systemImage: "trash")
                                             }
                                             .tint(Color.Fruit.cherry)
+                                        }
+                                        // CONTEXT MENU (Rename/Delete)
+                                        .contextMenu {
+                                            Button {
+                                                billToRename = bill
+                                                renameText = bill.title
+                                                showRenameAlert = true
+                                            } label: {
+                                                Label("Rename", systemImage: "pencil")
+                                            }
+                                            
+                                            Button(role: .destructive) {
+                                                deleteBill(bill)
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
                                         }
                                     }
                                 }
@@ -81,6 +101,18 @@ struct PantryView: View {
             }
             .navigationDestination(for: Bill.self) { bill in
                 BillDetailView(bill: bill)
+            }
+            // Rename Alert
+            .alert("Rename Receipt", isPresented: $showRenameAlert) {
+                TextField("New Name", text: $renameText)
+                Button("Cancel", role: .cancel) { }
+                Button("Save") {
+                    if let bill = billToRename {
+                        bill.title = renameText
+                    }
+                }
+            } message: {
+                Text("Enter a new name for this receipt.")
             }
         }
     }

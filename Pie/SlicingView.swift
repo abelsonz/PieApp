@@ -17,6 +17,13 @@ struct SlicingView: View {
     @State private var renameText: String = ""
     @State private var showRenameAlert = false
     
+    // Add/Edit Item Logic
+    @State private var showItemSheet = false
+    @State private var itemToEdit: BillItem? // If set, we are editing; if nil, adding
+    
+    // Delete Item Logic
+    @State private var itemToDelete: BillItem?
+    
     init(initialItems: [BillItem], initialTax: Double) {
         _items = State(initialValue: initialItems)
         _taxAmount = State(initialValue: initialTax)
@@ -45,9 +52,8 @@ struct SlicingView: View {
                                 .font(.headline)
                                 .foregroundColor(.pieCoffee)
                                 .padding(10)
-                                .background(Color.pieCream)
+                                .background(Color.white.opacity(0.5)) // Glassy style
                                 .clipShape(Circle())
-                                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                         }
                         
                         Spacer()
@@ -72,17 +78,25 @@ struct SlicingView: View {
                             ForEach(Array(diners.enumerated()), id: \.element.id) { index, diner in
                                 DinerAvatar(
                                     diner: diner,
-                                    isSelected: activeDinerId == diner.id,
-                                    // LOGIC FIX: Never allow deletion of the first diner (owner)
-                                    onDelete: index == 0 ? nil : {
-                                        deleteDiner(diner)
-                                    }
+                                    isSelected: activeDinerId == diner.id
                                 )
                                 .onTapGesture {
                                     withAnimation { activeDinerId = diner.id }
                                 }
-                                .onLongPressGesture(minimumDuration: 0.125) {
-                                    startRenaming(diner)
+                                .contextMenu {
+                                    Button {
+                                        startRenaming(diner)
+                                    } label: {
+                                        Label("Rename", systemImage: "pencil")
+                                    }
+                                    
+                                    if index != 0 {
+                                        Button(role: .destructive) {
+                                            deleteDiner(diner)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -114,6 +128,47 @@ struct SlicingView: View {
                                     activeDinerId: activeDinerId,
                                     diners: diners
                                 )
+                                // Extended Context Menu
+                                .contextMenu {
+                                    // 1. Split All
+                                    Button {
+                                        withAnimation {
+                                            item.assignedDinerIds = diners.map { $0.id }
+                                        }
+                                    } label: {
+                                        Label("Split with Everyone", systemImage: "person.3.fill")
+                                    }
+                                    
+                                    // 2. Edit
+                                    Button {
+                                        itemToEdit = item
+                                        showItemSheet = true
+                                    } label: {
+                                        Label("Edit Item", systemImage: "pencil")
+                                    }
+                                    
+                                    // 3. Delete
+                                    Button(role: .destructive) {
+                                        itemToDelete = item
+                                    } label: {
+                                        Label("Delete Item", systemImage: "trash")
+                                    }
+                                }
+                            }
+                            
+                            // "Add Item" Button
+                            Button(action: {
+                                itemToEdit = nil // Ensure we are in "Add" mode
+                                showItemSheet = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "plus")
+                                    Text("Add Item")
+                                }
+                                .pieFont(.body, weight: .semibold)
+                                .foregroundColor(.pieCrust)
+                                .padding(.vertical, 15)
+                                .frame(maxWidth: .infinity)
                             }
                         }
                     }
@@ -152,7 +207,7 @@ struct SlicingView: View {
                 items: items,
                 diners: diners,
                 initialTax: taxAmount,
-                onFinish: { dismiss() } // This dismisses SlicingView after checkout
+                onFinish: { dismiss() }
             )
         }
         .toolbar(.hidden, for: .tabBar)
@@ -164,6 +219,37 @@ struct SlicingView: View {
             Button("Save") { saveDinerName() }
         } message: {
             Text("Enter a new name for this diner.")
+        }
+        
+        // ADD / EDIT Item Sheet
+        .sheet(isPresented: $showItemSheet) {
+            AddItemSheet(
+                initialName: itemToEdit?.name ?? "",
+                initialPrice: itemToEdit != nil ? String(format: "%.2f", itemToEdit!.price) : ""
+            ) { name, price in
+                if let editingItem = itemToEdit {
+                    // Update existing
+                    if let index = items.firstIndex(where: { $0.id == editingItem.id }) {
+                        items[index].name = name
+                        items[index].price = price
+                    }
+                } else {
+                    // Add new
+                    addNewItem(name: name, price: price)
+                }
+                itemToEdit = nil
+            }
+            .presentationDetents([.fraction(0.4)])
+            .presentationDragIndicator(.visible)
+        }
+        
+        // Delete Item Sheet
+        .sheet(item: $itemToDelete) { item in
+            DeleteItemSheet(itemName: item.name) {
+                deleteItem(item)
+            }
+            .presentationDetents([.fraction(0.3)])
+            .presentationDragIndicator(.visible)
         }
     }
     
@@ -211,6 +297,20 @@ struct SlicingView: View {
             diners[index].name = renameText
         }
     }
+    
+    func addNewItem(name: String, price: Double) {
+        let newItem = BillItem(name: name, price: price)
+        withAnimation {
+            items.append(newItem)
+        }
+    }
+    
+    func deleteItem(_ item: BillItem) {
+        withAnimation {
+            items.removeAll(where: { $0.id == item.id })
+        }
+        itemToDelete = nil
+    }
 }
 
 // MARK: - Subviews
@@ -218,12 +318,10 @@ struct SlicingView: View {
 struct DinerAvatar: View {
     let diner: Diner
     let isSelected: Bool
-    var onDelete: (() -> Void)? = nil
     
     var body: some View {
         VStack(spacing: 4) {
             ZStack(alignment: .topTrailing) {
-                // 1. The Avatar (The "Safe" Tap Zone)
                 ZStack {
                     if isSelected {
                         Circle()
@@ -238,36 +336,156 @@ struct DinerAvatar: View {
                         .pieFont(.headline, weight: .bold)
                         .foregroundColor(isSelected ? .white : .pieCoffee)
                 }
-                // IMPORTANT: We explicitly define the content shape to be a circle
-                // This ensures tapping the corners doesn't trigger the avatar selection
-                .contentShape(Circle())
-                
-                // 2. The Delete Button (Moved further out)
-                if let onDelete = onDelete {
-                    Button(action: onDelete) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22)) // Slightly larger for visibility
-                            .foregroundColor(Color.Fruit.cherry)
-                            .background(Circle().fill(Color.white).padding(2)) // White backing makes it pop
-                            .shadow(radius: 2) // Slight shadow to separate from avatar
-                    }
-                    // Move it further away from the center tap zone
-                    .offset(x: 8, y: -8)
-                    // Ensure the button has its own large hit target
-                    .frame(width: 44, height: 44, alignment: .topTrailing)
-                }
             }
-            .scaleEffect(isSelected ? 1.1 : 1.0)
-            .animation(.spring(), value: isSelected)
+            .frame(width: 60, height: 60)
+            .contentShape(Rectangle())
             
             Text(diner.name)
                 .pieFont(.caption2, weight: .semibold)
                 .opacity(isSelected ? 1.0 : 0.5)
         }
-        // Increase spacing between avatars so the X doesn't overlap the neighbor
         .padding(.horizontal, 4)
     }
 }
+
+struct AddItemSheet: View {
+    @Environment(\.dismiss) var dismiss
+    
+    var initialName: String = ""
+    var initialPrice: String = ""
+    var onAdd: (String, Double) -> Void
+    
+    @State private var name = ""
+    @State private var price = ""
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        ZStack {
+            Color.pieCream.ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text(initialName.isEmpty ? "Add Item" : "Edit Item")
+                    .pieFont(.title3, weight: .bold)
+                    .foregroundColor(.pieCoffee)
+                    .padding(.top, 20)
+                
+                VStack(spacing: 12) {
+                    ZStack(alignment: .leading) {
+                        if name.isEmpty {
+                            Text("Item Name (e.g. Fries)")
+                                .pieFont(.body, weight: .medium)
+                                .foregroundColor(.pieCoffee.opacity(0.5))
+                        }
+                        TextField("", text: $name)
+                            .pieFont(.body, weight: .medium)
+                            .foregroundColor(.pieCoffee)
+                            .tint(.pieCrust)
+                    }
+                    .padding()
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    
+                    ZStack(alignment: .leading) {
+                        if price.isEmpty {
+                            Text("Price (0.00)")
+                                .pieFont(.body, weight: .bold)
+                                .foregroundColor(.pieCoffee.opacity(0.5))
+                        }
+                        TextField("", text: $price)
+                            .keyboardType(.decimalPad)
+                            .pieFont(.body, weight: .bold)
+                            .foregroundColor(.pieCoffee)
+                            .tint(.pieCrust)
+                    }
+                    .padding()
+                    .background(Color.white)
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                Button(action: {
+                    if let priceValue = Double(price), !name.isEmpty {
+                        onAdd(name, priceValue)
+                        dismiss()
+                    }
+                }) {
+                    Text(initialName.isEmpty ? "Add to Bill" : "Save Changes")
+                        .pieFont(.headline, weight: .bold)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(name.isEmpty || price.isEmpty ? Color.pieCrust.opacity(0.3) : Color.pieCrust)
+                        .cornerRadius(16)
+                }
+                .disabled(name.isEmpty || price.isEmpty)
+                .padding(.horizontal)
+                .padding(.top, 10)
+                
+                Spacer()
+            }
+        }
+        .onAppear {
+            name = initialName
+            price = initialPrice
+            isFocused = true
+        }
+    }
+}
+
+struct DeleteItemSheet: View {
+    let itemName: String
+    let onConfirm: () -> Void
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        ZStack {
+            Color.pieCream.ignoresSafeArea()
+            
+            VStack(spacing: 25) {
+                Text("Delete Item?")
+                    .pieFont(.title3, weight: .bold)
+                    .foregroundColor(.pieCoffee)
+                    .padding(.top, 25)
+                
+                Text("Are you sure you want to remove\n\"\(itemName)\"?")
+                    .pieFont(.body)
+                    .foregroundColor(.pieCoffee.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                
+                HStack(spacing: 15) {
+                    Button(action: { dismiss() }) {
+                        Text("Cancel")
+                            .pieFont(.headline, weight: .bold)
+                            .foregroundColor(.pieCoffee)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(16)
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.pieCoffee.opacity(0.1), lineWidth: 1))
+                    }
+                    
+                    Button(action: {
+                        onConfirm()
+                        dismiss()
+                    }) {
+                        Text("Delete")
+                            .pieFont(.headline, weight: .bold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.Fruit.cherry)
+                            .cornerRadius(16)
+                    }
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+        }
+    }
+}
+
 struct MultiDinerItemRow: View {
     @Binding var item: BillItem
     var activeDinerId: UUID?
@@ -305,28 +523,21 @@ struct MultiDinerItemRow: View {
                 Spacer()
                 
                 // Right: Price
-                // LAYOUT FIX: Use ZStack alignment to prevent height changes
                 ZStack(alignment: .trailing) {
-                    // 1. The main price. We dim it if split.
                     Text(String(format: "$%.2f", item.price))
                         .pieFont(item.assignedDinerIds.count > 1 ? .caption : .body, weight: item.assignedDinerIds.count > 1 ? .regular : .semibold)
                         .strikethrough(item.assignedDinerIds.count > 1)
                         .opacity(item.assignedDinerIds.count > 1 ? 0.5 : 1.0)
-                        // If split, we move this text up slightly to make room for the "ea" text
-                        // OR we can just rely on the Overlay for the "ea" text
                         .offset(y: item.assignedDinerIds.count > 1 ? -10 : 0)
                     
-                    // 2. The split price. We show this in an overlay or below without pushing boundaries?
-                    // Actually, let's keep it clean: Vertical stack with fixed frame is safest,
-                    // but overlay prevents parent expansion best.
                     if item.assignedDinerIds.count > 1 {
                         Text(String(format: "$%.2f ea", item.pricePerShare))
                             .pieFont(.caption, weight: .bold)
                             .foregroundColor(.pieCrust)
-                            .offset(y: 10) // Position below the strikethrough price
+                            .offset(y: 10)
                     }
                 }
-                .frame(height: 40) // FORCE a fixed height for the price container so it never jumps
+                .frame(height: 40)
             }
             .padding()
             .background(isAssignedToActive ? Color.pieCrust.opacity(0.1) : Color.pieCream)

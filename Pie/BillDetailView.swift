@@ -1,10 +1,8 @@
 import SwiftUI
-import SwiftData // 1. Added import
+import SwiftData
 
 struct BillDetailView: View {
     @Environment(\.dismiss) var dismiss
-    
-    // 2. Changed from 'let' to '@Bindable var' to allow editing
     @Bindable var bill: Bill
     
     // For Screenshot
@@ -30,7 +28,7 @@ struct BillDetailView: View {
                             .clipShape(Circle())
                     }
                     Spacer()
-                    Text("Receipt Details")
+                    Text("Split Details")
                         .pieFont(.headline, weight: .bold)
                         .foregroundColor(.pieCoffee.opacity(0.7))
                     Spacer()
@@ -59,9 +57,9 @@ struct BillDetailView: View {
                 .padding(.top, 60)
                 .padding(.bottom, 10)
                 
-                // Content
+                // Content (Interactive)
                 ScrollView {
-                    contentToShare
+                    interactiveContent
                         .padding(.bottom, 100)
                 }
             }
@@ -76,24 +74,22 @@ struct BillDetailView: View {
                 renderImage()
             }
         }
-        // 4. Update the shareable screenshot immediately when you type a new name
         .onChange(of: bill.title) { _, _ in
             renderImage()
         }
     }
     
-    // Extracted view for both display and screenshot
-    var contentToShare: some View {
+    // MARK: - 1. Interactive View (For the User)
+    var interactiveContent: some View {
         VStack(spacing: 25) {
-            // 1. The "Ticket" (Grand Total)
+            // Header Section
             VStack(spacing: 5) {
-                
-                // 3. EDITABLE TITLE FIELD
+                // Editable Text Field
                 TextField("Receipt Name", text: $bill.title)
                     .pieFont(.body, weight: .semibold)
-                    .multilineTextAlignment(.center) // Centers the text
+                    .multilineTextAlignment(.center)
                     .opacity(0.6)
-                    .submitLabel(.done) // Shows "Done" on keyboard
+                    .submitLabel(.done)
                 
                 Text(String(format: "$%.2f", bill.totalAmount))
                     .font(.system(size: 48, weight: .heavy))
@@ -111,7 +107,7 @@ struct BillDetailView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
             
-            // 2. The Breakdown
+            // Breakdown Section
             VStack(alignment: .leading, spacing: 15) {
                 Text("Split Breakdown")
                     .pieFont(.title3, weight: .bold)
@@ -125,13 +121,61 @@ struct BillDetailView: View {
                         .padding(.horizontal)
                 } else {
                     ForEach(bill.diners) { diner in
-                        DinerSummaryCard(diner: diner, bill: bill, billSubtotal: billSubtotal)
+                        // Show Venmo Button here
+                        DinerSummaryCard(diner: diner, bill: bill, billSubtotal: billSubtotal, showActions: true)
                             .padding(.horizontal)
                     }
                 }
             }
             
-            // Branding Footer
+            Text("Split with Pie")
+                .pieFont(.caption, weight: .bold)
+                .foregroundColor(.pieCrust)
+                .padding(.top, 20)
+        }
+    }
+    
+    // MARK: - 2. Snapshot View (Clean for Image)
+    var snapshotTemplate: some View {
+        VStack(spacing: 25) {
+            // Header Section
+            VStack(spacing: 5) {
+                // FIXED: Use Text instead of TextField (No yellow bar!)
+                Text(bill.title)
+                    .pieFont(.body, weight: .semibold)
+                    .multilineTextAlignment(.center)
+                    .opacity(0.6)
+                
+                Text(String(format: "$%.2f", bill.totalAmount))
+                    .font(.system(size: 48, weight: .heavy))
+                    .foregroundColor(.pieCrust)
+                
+                HStack(spacing: 15) {
+                    Label(String(format: "Tax $%.2f", bill.taxAmount), systemImage: "building.columns")
+                    Label(String(format: "Tip $%.2f", bill.tipAmount), systemImage: "star.fill")
+                }
+                .font(.caption)
+                .foregroundColor(.pieCoffee)
+                .opacity(0.5)
+                .padding(.top, 5)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+            
+            // Breakdown Section
+            VStack(alignment: .leading, spacing: 15) {
+                Text("Split Breakdown")
+                    .pieFont(.title3, weight: .bold)
+                    .foregroundColor(.pieCoffee)
+                    .padding(.horizontal)
+                
+                ForEach(bill.diners) { diner in
+                    // FIXED: Hide Venmo Button (Cleaner look)
+                    DinerSummaryCard(diner: diner, bill: bill, billSubtotal: billSubtotal, showActions: false)
+                        .padding(.horizontal)
+                }
+            }
+            
             Text("Split with Pie")
                 .pieFont(.caption, weight: .bold)
                 .foregroundColor(.pieCrust)
@@ -139,11 +183,13 @@ struct BillDetailView: View {
         }
         .padding(20)
         .background(Color.pieCream)
+        .frame(width: 375) // Fixed width for perfect export
     }
     
     @MainActor
     func renderImage() {
-        let renderer = ImageRenderer(content: contentToShare.frame(width: 375))
+        // Render the CLEAN snapshot template, not the interactive view
+        let renderer = ImageRenderer(content: snapshotTemplate)
         renderer.scale = 3.0
         
         if let uiImage = renderer.uiImage {
@@ -152,11 +198,12 @@ struct BillDetailView: View {
     }
 }
 
+// Updated Card to handle hiding buttons
 struct DinerSummaryCard: View {
     let diner: Diner; let bill: Bill; let billSubtotal: Double
+    var showActions: Bool = true // Default to true
     
     var dinerItems: [BillItem] { bill.items.filter { $0.assignedDinerIds.contains(diner.id) } }
-    
     var dinerSubtotal: Double { dinerItems.reduce(0) { total, item in total + (item.price / Double(item.assignedDinerIds.count)) } }
     var dinerTax: Double { billSubtotal == 0 ? 0 : bill.taxAmount * (dinerSubtotal / billSubtotal) }
     var dinerTip: Double { billSubtotal == 0 ? 0 : bill.tipAmount * (dinerSubtotal / billSubtotal) }
@@ -169,15 +216,34 @@ struct DinerSummaryCard: View {
                     .frame(width: 40, height: 40)
                     .overlay(Text(diner.initials).pieFont(.caption, weight: .bold).foregroundColor(Color(hex: diner.hexColor)))
                 
-                Text(diner.name)
-                    .pieFont(.headline, weight: .bold)
-                    .foregroundColor(.pieCoffee)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(diner.name)
+                        .pieFont(.headline, weight: .bold)
+                        .foregroundColor(.pieCoffee)
+                }
                 
                 Spacer()
+                
+                // Hide button if generating screenshot
+                if showActions && diner.name.lowercased() != "you" {
+                    Button(action: openVenmo) {
+                        HStack(spacing: 4) {
+                            Text("Venmo Request")
+                            Image(systemName: "arrow.up.right")
+                        }
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(.white)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(Color.blue)
+                        .clipShape(Capsule())
+                    }
+                }
                 
                 Text(String(format: "$%.2f", dinerTotal))
                     .pieFont(.title3, weight: .heavy)
                     .foregroundColor(Color(hex: diner.hexColor))
+                    .padding(.leading, 8)
             }
             .padding(16)
             
@@ -228,8 +294,26 @@ struct DinerSummaryCard: View {
                 .background(Color.white.opacity(0.3))
             }
         }
-        .background(Color.pieCream)
+        .background(Color.white)
         .cornerRadius(20)
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.pieCoffee.opacity(0.1), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.pieCoffee.opacity(0.05), lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.03), radius: 5, y: 2)
+    }
+    
+    // Deep Link Logic
+    func openVenmo() {
+        let note = "Dinner (Split with Pie)"
+        let amountString = String(format: "%.2f", dinerTotal)
+        let urlString = "venmo://paycharge?txn=pay&amount=\(amountString)&note=\(note)"
+        
+        if let url = URL(string: urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "") {
+            UIApplication.shared.open(url) { success in
+                if !success {
+                    if let webUrl = URL(string: "https://venmo.com/?txn=charge&amount=\(amountString)&note=\(note)") {
+                        UIApplication.shared.open(webUrl)
+                    }
+                }
+            }
+        }
     }
 }
